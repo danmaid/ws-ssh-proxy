@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ws-ssh-proxy Demo</title>
+  <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css" />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: rgba(255,255,255,0.06);
+      --border: rgba(255,255,255,0.12);
+      --text: rgba(255,255,255,0.88);
+      --muted: rgba(255,255,255,0.62);
+      --brand: #7dd3fc;
+      --shadow: 0 10px 30px rgba(0,0,0,0.35);
+      --radius: 14px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--text);
+      background:
+        radial-gradient(1200px 700px at 20% 10%, rgba(125, 211, 252, 0.18), transparent 60%),
+        radial-gradient(800px 600px at 80% 40%, rgba(52, 211, 153, 0.10), transparent 60%),
+        radial-gradient(700px 500px at 60% 90%, rgba(251, 191, 36, 0.10), transparent 60%),
+        var(--bg);
+      overflow: hidden;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(10px);
+      background: rgba(10, 16, 35, 0.55);
+    }
+    .brand { display:flex; gap:10px; align-items:center; font-weight:800; }
+    .dot { width:10px; height:10px; border-radius:50%; background: var(--brand); box-shadow:0 0 0 4px rgba(125,211,252,0.15); }
+    .pill {
+      font-size: 12px;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      padding: 8px 10px;
+      border-radius: 999px;
+    }
+    .top-actions { display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; align-items:center; }
+    .container {
+      height: calc(100% - 58px);
+      display: grid;
+      grid-template-columns: 480px 1fr;
+      gap: 14px;
+      padding: 14px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .panel-head {
+      padding: 12px 12px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+    }
+    .panel h2 { margin: 0; font-size: 14px; font-weight: 800; }
+    .panel-body { padding: 12px; display:flex; flex-direction:column; gap: 12px; overflow:auto; min-height:0; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    label { font-size: 12px; color: var(--muted); display:block; margin-bottom:6px; }
+    input {
+      width: 100%;
+      padding: 10px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,0.25);
+      color: var(--text);
+      outline: none;
+    }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .btn {
+      padding: 9px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      cursor: pointer;
+      user-select:none;
+      font-weight: 700;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .btn:hover { background: rgba(255,255,255,0.10); }
+    .btn.primary { border-color: rgba(125,211,252,0.45); background: rgba(125,211,252,0.12); }
+    .btn.danger { border-color: rgba(251,113,133,0.45); background: rgba(251,113,133,0.12); }
+    .btn.small { padding: 7px 10px; font-size: 12px; border-radius: 9px; }
+    .muted { color: var(--muted); }
+    .table-wrap { border: 1px solid var(--border); border-radius: 12px; overflow:hidden; background: rgba(0,0,0,0.18); }
+    table { width:100%; border-collapse: collapse; font-size: 12px; }
+    thead { background: rgba(255,255,255,0.05); }
+    th, td { padding: 9px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); vertical-align: top; }
+    th { text-align: left; color: rgba(255,255,255,0.80); font-weight: 800; }
+    tbody tr:hover { background: rgba(255,255,255,0.04); }
+    .badge { display:inline-flex; align-items:center; gap:6px; padding:3px 8px; border-radius:999px; border:1px solid var(--border); background: rgba(255,255,255,0.04); font-weight:800; font-size:11px; }
+    .id { font-family: var(--mono); font-size: 11px; word-break: break-all; color: rgba(255,255,255,0.78); }
+    .actions { display:flex; gap:6px; flex-wrap:wrap; }
+    #terminal { flex:1; min-height:0; padding: 10px; }
+    .statusbar { display:flex; justify-content:space-between; gap:10px; padding: 10px 12px; border-top: 1px solid var(--border); background: rgba(255,255,255,0.03); font-size: 12px; color: var(--muted); }
+    a { color: var(--brand); text-decoration:none; }
+    a:hover { text-decoration: underline; }
+    @media (max-width: 1100px) { .container { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot"></span><span>ws-ssh-proxy</span><span class="pill">Demo</span></div>
+  <div class="top-actions">
+    <span class="pill">OpenAPI: <a href="/openapi.yaml" target="_blank" rel="noreferrer">/openapi.yaml</a></span>
+    <span class="pill" id="ssePill">SSE: -</span>
+    <span class="pill" id="wsPill">WS: -</span>
+    <span class="pill" id="verPill">v:-</span>
+  </div>
+</header>
+<div class="container">
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Connections</h2>
+      <div class="row">
+        <button class="btn small" id="get">GET snapshot</button>
+        <button class="btn small" id="reSse">Reconnect SSE</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="grid">
+        <div><label>BASE_PATH</label><input id="base" value="/v1/ssh" /></div>
+        <div><label>Idle timeout (ms)</label><input id="idle" value="600000" /></div>
+        <div><label>Host</label><input id="host" value="127.0.0.1" /></div>
+        <div><label>Port</label><input id="port" value="22" /></div>
+        <div><label>Username</label><input id="user" value="user" /></div>
+        <div><label>Password</label><input id="pass" type="password" value="pass" /></div>
+      </div>
+
+      <div class="row">
+        <button class="btn primary" id="create">Create</button>
+        <button class="btn" id="attach">Attach Selected</button>
+        <button class="btn" id="attachRo">Attach RO</button>
+        <button class="btn danger" id="del">Delete Selected</button>
+        <span class="muted" id="sel">Selected: (none)</span>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:120px">State</th><th>ID</th><th style="width:90px">Clients</th><th style="width:170px">Meta</th><th style="width:190px">Actions</th></tr></thead>
+          <tbody id="tbody"><tr><td colspan="5" class="muted">(waiting)</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="muted" style="font-size:12px;line-height:1.4">
+        SSE summary をトリガに GET snapshot を取得します（ポーリング無し）。
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Terminal</h2>
+      <div class="row">
+        <button class="btn small" id="clear">Clear</button>
+        <button class="btn small" id="wsClose">Disconnect WS</button>
+      </div>
+    </div>
+    <div id="terminal"></div>
+    <div class="statusbar">
+      <div><span class="muted">Attached:</span> <span class="id" id="attached">(none)</span></div>
+      <div><span class="muted">Size:</span> <span class="id" id="size">-</span></div>
+    </div>
+  </section>
+</div>
+
+<script src="https://unpkg.com/xterm/lib/xterm.js"></script>
+<script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const term = new Terminal({cursorBlink:true, convertEol:true, fontFamily:'ui-monospace, Menlo, Consolas, monospace', fontSize: 13, theme:{background:'rgba(0,0,0,0)'}});
+  const fitAddon = new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+  term.open($('terminal'));
+  fitAddon.fit();
+
+  function basePath(){ const v=$('base').value.trim(); if(!v) return ''; return v.endsWith('/')?v.slice(0,-1):v; }
+  async function api(path, options={}){
+    const res = await fetch(`${basePath()}${path}`, {headers:{'content-type':'application/json', ...(options.headers||{})}, ...options});
+    if(!res.ok) throw new Error(await res.text());
+    const ct = res.headers.get('content-type')||'';
+    return ct.includes('application/json') ? await res.json() : await res.text();
+  }
+
+  function setPill(id, text, ok){ const el=$(id); el.textContent=text; el.style.borderColor = ok ? 'rgba(52,211,153,0.55)' : 'rgba(148,163,184,0.55)'; el.style.color = ok ? 'rgba(52,211,153,0.95)' : 'rgba(148,163,184,0.95)'; }
+  function setVer(v){ $('verPill').textContent = `v:${v}`; }
+
+  // WS
+  let ws=null; let wsReadOnly=false;
+  term.onData((d)=>{ if(ws && ws.readyState===WebSocket.OPEN && !wsReadOnly) ws.send(d); });
+  function sendResize(){ $('size').textContent = `${term.cols}x${term.rows}`; if(ws && ws.readyState===WebSocket.OPEN){ ws.send(JSON.stringify({type:'resize', cols: term.cols, rows: term.rows})); } }
+  window.addEventListener('resize', ()=>{ fitAddon.fit(); sendResize(); });
+
+  function wsUrlFor(id, ro){ const scheme = location.protocol==='https:'?'wss':'ws'; const qs = ro?'?readOnly=1':''; return `${scheme}://${location.host}${basePath()}/ws/${id}${qs}`; }
+  function closeWs(){ if(ws){ try{ws.close(1000,'close')}catch{} } ws=null; wsReadOnly=false; setPill('wsPill','WS: -', false); $('attached').textContent='(none)'; }
+
+  async function attach(id, ro){
+    if(!id) return;
+    closeWs();
+    wsReadOnly=!!ro;
+    $('attached').textContent = id + (ro?' (RO)':'');
+    ws = new WebSocket(wsUrlFor(id, ro));
+    ws.binaryType='arraybuffer';
+    setPill('wsPill','WS: connecting', false);
+    ws.onopen = ()=>{ setPill('wsPill','WS: connected', true); fitAddon.fit(); sendResize(); term.focus(); };
+    ws.onmessage = (ev)=>{ if(ev.data instanceof ArrayBuffer) term.write(new Uint8Array(ev.data)); else term.write(ev.data); };
+    ws.onclose = ()=>{ setPill('wsPill','WS: closed', false); };
+    ws.onerror = ()=>{ setPill('wsPill','WS: error', false); };
+  }
+
+  // Connections table
+  let selectedId=null;
+  function select(id){ selectedId=id; $('sel').textContent = `Selected: ${id||'(none)'}`; for(const tr of document.querySelectorAll('tbody tr[data-id]')) tr.style.background = tr.dataset.id===id ? 'rgba(125,211,252,0.12)' : ''; }
+
+  function renderTable(conns){
+    const tb = $('tbody');
+    if(!conns || !conns.length){ tb.innerHTML = `<tr><td colspan="5" class="muted">(no connections)</td></tr>`; return; }
+    tb.innerHTML = conns.map(c=>{
+      const meta = `${(c.meta?.username||'-')}@${(c.meta?.host||'-')}:${(c.meta?.port??'-')}`;
+      return `
+        <tr data-id="${c.id}" style="cursor:pointer">
+          <td><span class="badge">${c.state}</span><div class="muted" style="font-size:11px;margin-top:4px">idle:${c.idleTimeoutMs}ms</div></td>
+          <td class="id">${c.id}</td>
+          <td><span class="badge">${c.attachedClients||0}</span></td>
+          <td class="id">${meta}</td>
+          <td>
+            <div class="actions">
+              <button class="btn small" data-a="attach">Attach</button>
+              <button class="btn small" data-a="ro">RO</button>
+              <button class="btn small danger" data-a="del">Del</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    for(const tr of tb.querySelectorAll('tr[data-id]')){
+      tr.addEventListener('click', (ev)=>{
+        const id = tr.dataset.id;
+        select(id);
+        const btn = ev.target && ev.target.closest && ev.target.closest('button');
+        if(!btn) return;
+        const act = btn.dataset.a;
+        if(act==='attach') attach(id,false);
+        if(act==='ro') attach(id,true);
+        if(act==='del') del(id);
+      });
+    }
+    if(selectedId) select(selectedId);
+  }
+
+  async function refresh(){
+    const snap = await api('/connections', {method:'GET'});
+    setVer(snap.version);
+    renderTable(snap.connections);
+    return snap;
+  }
+
+  async function create(){
+    const body = {host:$('host').value.trim(), port:Number($('port').value), username:$('user').value.trim(), password:$('pass').value, cols: term.cols, rows: term.rows, idleTimeoutMs: Number($('idle').value)||undefined};
+    const json = await api('/connections', {method:'POST', body: JSON.stringify(body)});
+    select(json.id);
+  }
+
+  async function del(id){
+    if(!id) return;
+    if(!confirm(`Delete ${id}?`)) return;
+    await api(`/connections/${id}`, {method:'DELETE'});
+    if(selectedId===id) select(null);
+    await refresh();
+  }
+
+  // SSE summary -> GET snapshot (debounce)
+  let es=null;
+  let timer=null;
+  function triggerFetch(){
+    if(timer) return;
+    timer = setTimeout(async ()=>{ timer=null; try{ await refresh(); } catch(e){ console.warn(e); } }, 120);
+  }
+  function connectSse(){
+    if(es){ try{es.close()}catch{} }
+    setPill('ssePill', 'SSE: connecting', false);
+    es = new EventSource(`${basePath()}/connections/stream`);
+    es.onopen = ()=> setPill('ssePill', 'SSE: connected', true);
+    es.onerror = ()=> setPill('ssePill', 'SSE: retrying', false);
+    es.addEventListener('connections', (ev)=>{
+      try{ const s = JSON.parse(ev.data); setVer(s.version); triggerFetch(); } catch(e){ console.warn(e); }
+    });
+  }
+
+  $('get').onclick = ()=>refresh();
+  $('reSse').onclick = ()=>connectSse();
+  $('create').onclick = async ()=>{ try{ await create(); } finally { /* SSE will update */ } };
+  $('attach').onclick = ()=>{ if(!selectedId) return; attach(selectedId,false); };
+  $('attachRo').onclick = ()=>{ if(!selectedId) return; attach(selectedId,true); };
+  $('del').onclick = ()=>{ if(!selectedId) return; del(selectedId); };
+  $('clear').onclick = ()=>term.clear();
+  $('wsClose').onclick = ()=>closeWs();
+
+  setPill('ssePill','SSE: -', false);
+  setPill('wsPill','WS: -', false);
+  setVer('-');
+  connectSse();
+  refresh();
+  sendResize();
+</script>
+</body>
+</html>

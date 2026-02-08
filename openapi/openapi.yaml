@@ -1,0 +1,198 @@
+openapi: 3.0.3
+info:
+  title: ws-ssh-proxy API
+  version: 0.2.0
+  description: |
+    REST で SSH 接続を管理し、WebSocket で既存接続にアタッチして双方向に中継する API。
+    connections の更新通知は SSE (summary) を利用し、実データは GET snapshot で取得します。
+servers:
+  - url: /v1/ssh
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  ts: { type: integer, format: int64 }
+  /connections:
+    post:
+      summary: Create SSH connection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConnectionRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateConnectionResponse'
+        '400':
+          description: Bad request
+    get:
+      summary: List connections (full snapshot)
+      description: |
+        全量スナップショットを返します。SSE summary を受け取ったら本APIを取得してください。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionsSnapshot'
+  /connections/stream:
+    get:
+      summary: Stream connections update summary (SSE)
+      description: |
+        event: connections / data: summary (version/ts/reason/changedIds?/counts)
+      responses:
+        '200':
+          description: OK
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /connections/{id}:
+    delete:
+      summary: Delete a connection
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+        '404':
+          description: Not found
+  /connections/{id}/resize:
+    post:
+      summary: Resize PTY
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResizeRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  cols: { type: integer }
+                  rows: { type: integer }
+  /ws/{id}:
+    get:
+      summary: WebSocket attach (upgrade)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: readOnly
+          required: false
+          schema: { type: string, enum: ['1'] }
+      responses:
+        '101':
+          description: Switching Protocols
+components:
+  schemas:
+    CreateConnectionRequest:
+      type: object
+      required: [host, username, password]
+      properties:
+        host: { type: string }
+        port: { type: integer, default: 22 }
+        username: { type: string }
+        password: { type: string }
+        cols: { type: integer, default: 120 }
+        rows: { type: integer, default: 30 }
+        idleTimeoutMs: { type: integer, default: 600000 }
+    CreateConnectionResponse:
+      type: object
+      properties:
+        id: { type: string }
+        state: { type: string }
+        createdAt: { type: integer, format: int64 }
+        lastActivityAt: { type: integer, format: int64 }
+        idleTimeoutMs: { type: integer }
+        wsPath: { type: string }
+        meta:
+          type: object
+          properties:
+            host: { type: string }
+            port: { type: integer }
+            username: { type: string }
+    ResizeRequest:
+      type: object
+      required: [cols, rows]
+      properties:
+        cols: { type: integer }
+        rows: { type: integer }
+    ConnectionSummary:
+      type: object
+      properties:
+        id: { type: string }
+        state: { type: string }
+        createdAt: { type: integer, format: int64 }
+        lastActivityAt: { type: integer, format: int64 }
+        idleTimeoutMs: { type: integer }
+        attachedClients: { type: integer }
+        meta:
+          type: object
+          properties:
+            host: { type: string }
+            port: { type: integer }
+            username: { type: string }
+    ConnectionsSnapshot:
+      type: object
+      properties:
+        version: { type: integer }
+        ts: { type: integer, format: int64 }
+        connections:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionSummary'
+    ConnectionsSseSummary:
+      type: object
+      properties:
+        version: { type: integer }
+        ts: { type: integer, format: int64 }
+        reason: { type: string }
+        changedIds:
+          type: array
+          items: { type: string }
+        counts:
+          type: object
+          properties:
+            total: { type: integer }
+            ready: { type: integer }
+            connecting: { type: integer }
+            error: { type: integer }
+            closed: { type: integer }

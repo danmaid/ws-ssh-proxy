@@ -1,0 +1,22 @@
+{
+  "name": "ws-ssh-proxy",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "REST-managed SSH connections with WebSocket attach + embedded demo + OpenAPI + SSE summary",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "dev": "npm run build -- --watch & node --watch dist/server.js"
+  },
+  "dependencies": {
+    "ssh2": "^1.16.0",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.3.3"
+  }
+}
