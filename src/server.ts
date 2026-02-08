@@ -236,9 +236,9 @@ const server = http.createServer(async (req, res) => {
     const method = req.method ?? "GET";
     if (method === "OPTIONS") { res.writeHead(204, corsHeaders(req)); res.end(); return; }
 
-    if (method === "GET" && url.pathname === "/") { await serveFile(res, path.join(STATIC_ROOT, "index.html"), "text/html; charset=utf-8"); return; }
-    if (method === "GET" && url.pathname.startsWith("/examples/")) {
-      const rel = url.pathname.slice("/examples/".length);
+    if (method === "GET" && url.pathname === withBase("/")) { await serveFile(res, path.join(STATIC_ROOT, "index.html"), "text/html; charset=utf-8"); return; }
+    if (method === "GET" && url.pathname.startsWith(withBase("/examples/"))) {
+      const rel = url.pathname.slice(withBase("/examples/").length);
       const safe = path.normalize(rel).replace(/^\.\.(\/|\\\\)/, "");
       const p = path.join(STATIC_ROOT, safe);
       await serveFile(res, p, guessContentType(p)); return;
